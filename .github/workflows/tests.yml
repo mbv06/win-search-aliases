@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package and test dependencies
+        run: python -m pip install -e . pytest
+      - name: Run tests
+        run: python -m pytest -q
+
+  installer-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run installer one-liner smoke test
+        shell: pwsh
+        run: |
+          $installHome = Join-Path $env:RUNNER_TEMP 'win-search-aliases-smoke'
+          $env:WIN_SEARCH_ALIASES_PROJECT_SPEC = $env:GITHUB_WORKSPACE
+          $env:WIN_SEARCH_ALIASES_APP_HOME = $installHome
+          $env:WIN_SEARCH_ALIASES_SKIP_PATH = '1'
+          $env:WIN_SEARCH_ALIASES_SKIP_AUTO = '1'
+
+          Get-Content -Raw .\install.ps1 | iex
+
+          $command = Join-Path $installHome 'venv\Scripts\win-search-aliases.exe'
+          $uiCommand = Join-Path $installHome 'venv\Scripts\win-search-aliases-ui.exe'
+          if (-not (Test-Path -LiteralPath $command)) {
+            throw "Installed command was not found: $command"
+          }
+          if (-not (Test-Path -LiteralPath $uiCommand)) {
+            throw "Installed UI command was not found: $uiCommand"
+          }
+
+          & $command --help

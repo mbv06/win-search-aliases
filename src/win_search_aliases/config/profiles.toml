@@ -1,0 +1,5 @@
+[profiles]
+# Keyboard identifiers:
+# https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-language-pack-default-values
+"ru-jcuken" = ["00000419"]
+"uk-jcuken" = ["00000422", "00020422"]
