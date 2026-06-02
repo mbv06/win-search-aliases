@@ -6,9 +6,11 @@ from win_search_aliases import db as db_mod
 from win_search_aliases.aliases import AliasRecord
 from win_search_aliases.config import load_deny_list
 from win_search_aliases.db import (
+    READ_SQLITE_TIMEOUT_SECONDS,
     SOURCE_CUSTOM,
     SOURCE_GENERATED_AUTO,
     SOURCE_GENERATED_MANUAL,
+    connect,
     create_backup,
     insert_alias_records,
     managed_rows,
@@ -33,6 +35,118 @@ def test_read_tiles_and_counts_report_total_and_eligible(tmp_path) -> None:
     assert len(candidates) == 1
     assert candidates[0].display_name == "Google Chrome"
     assert candidates[0].content_c1.endswith("Google Chrome.lnk")
+
+
+def test_connect_applies_requested_busy_timeout(monkeypatch) -> None:
+    seen = {}
+
+    class FakeConnection:
+        def execute(self, sql):
+            seen["pragma"] = sql
+
+    def fake_sqlite_connect(path, *, timeout):
+        seen["path"] = path
+        seen["timeout"] = timeout
+        return FakeConnection()
+
+    monkeypatch.setattr(db_mod.sqlite3, "connect", fake_sqlite_connect)
+
+    conn = connect("AppsIndex.db", timeout_seconds=READ_SQLITE_TIMEOUT_SECONDS)
+
+    assert conn is not None
+    assert seen["timeout"] == READ_SQLITE_TIMEOUT_SECONDS
+    assert seen["pragma"] == "pragma busy_timeout = 1000"
+
+
+def test_read_tiles_retries_transient_locked_database(monkeypatch) -> None:
+    attempts = []
+    stopped = []
+
+    class FakeCursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class FakeConnection:
+        def __init__(self, should_fail: bool) -> None:
+            self.should_fail = should_fail
+            self.closed = False
+
+        def execute(self, sql, *_args, **_kwargs):
+            if sql == "pragma table_info(tiles)" and self.should_fail:
+                raise sqlite3.OperationalError("database is locked")
+            if sql == "pragma table_info(tiles)":
+                return FakeCursor([(0, "displayName"), (1, "appId"), (2, "cRank")])
+            if "from sqlite_master" in sql:
+                return FakeCursor([])
+            return FakeCursor([("Google Chrome", "chrome", 1)])
+
+        def close(self) -> None:
+            self.closed = True
+
+    def fake_connect(_path, **_kwargs):
+        attempts.append(True)
+        return FakeConnection(should_fail=len(attempts) == 1)
+
+    monkeypatch.setattr(db_mod, "connect", fake_connect)
+    monkeypatch.setattr(db_mod, "stop_search_host", lambda: stopped.append(True))
+    monkeypatch.setattr(db_mod.time, "sleep", lambda _seconds: None)
+
+    tiles = read_tiles("AppsIndex.db")
+
+    assert [(tile.display_name, tile.app_id) for tile in tiles] == [("Google Chrome", "chrome")]
+    assert len(attempts) == 2
+    assert stopped == [True]
+
+
+def test_read_tiles_retries_locked_tiles_content_join(monkeypatch) -> None:
+    attempts = []
+    stopped = []
+
+    class FakeCursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class FakeConnection:
+        def __init__(self, should_fail_join: bool) -> None:
+            self.should_fail_join = should_fail_join
+
+        def execute(self, sql, *_args, **_kwargs):
+            if sql == "pragma table_info(tiles)":
+                return FakeCursor([(0, "displayName"), (1, "appId"), (2, "cRank")])
+            if "from sqlite_master" in sql:
+                return FakeCursor([("tiles_content",)])
+            if sql == "pragma table_info(tiles_content)":
+                return FakeCursor([(0, "id"), (1, "c1")])
+            if "left join tiles_content" in sql:
+                if self.should_fail_join:
+                    raise sqlite3.OperationalError("database is locked")
+                return FakeCursor([("Google Chrome", "chrome", 1, "Programs/Google Chrome.lnk")])
+            return FakeCursor([("Google Chrome", "chrome", 1)])
+
+        def close(self) -> None:
+            pass
+
+    def fake_connect(_path, **_kwargs):
+        attempts.append(True)
+        return FakeConnection(should_fail_join=len(attempts) == 1)
+
+    monkeypatch.setattr(db_mod, "connect", fake_connect)
+    monkeypatch.setattr(db_mod, "stop_search_host", lambda: stopped.append(True))
+    monkeypatch.setattr(db_mod.time, "sleep", lambda _seconds: None)
+
+    tiles = read_tiles("AppsIndex.db")
+
+    assert [(tile.display_name, tile.content_c1) for tile in tiles] == [
+        ("Google Chrome", "Programs/Google Chrome.lnk")
+    ]
+    assert len(attempts) == 2
+    assert stopped == [True]
 
 
 def test_insert_alias_records_is_idempotent(tmp_path) -> None:
@@ -126,10 +240,45 @@ def test_managed_rows_closes_connection(monkeypatch) -> None:
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr("win_search_aliases.db.connect", lambda _path: FakeConnection())
+    monkeypatch.setattr("win_search_aliases.db.connect", lambda _path, **_kwargs: FakeConnection())
 
     assert managed_rows("AppsIndex.db") == []
     assert closed == [True]
+
+
+def test_managed_rows_retries_transient_locked_database(monkeypatch) -> None:
+    attempts = []
+    stopped = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("Google Chrome", "browser", 1, SOURCE_CUSTOM)]
+
+    class FakeConnection:
+        def __init__(self, should_fail: bool) -> None:
+            self.should_fail = should_fail
+
+        def execute(self, *_args, **_kwargs):
+            if self.should_fail:
+                raise sqlite3.OperationalError("database is locked")
+            return FakeCursor()
+
+        def close(self) -> None:
+            pass
+
+    def fake_connect(_path, **_kwargs):
+        attempts.append(True)
+        return FakeConnection(should_fail=len(attempts) == 1)
+
+    monkeypatch.setattr(db_mod, "connect", fake_connect)
+    monkeypatch.setattr(db_mod, "stop_search_host", lambda: stopped.append(True))
+    monkeypatch.setattr(db_mod.time, "sleep", lambda _seconds: None)
+
+    rows = managed_rows("AppsIndex.db")
+
+    assert rows == [("Google Chrome", "browser", 1, SOURCE_CUSTOM)]
+    assert len(attempts) == 2
+    assert stopped == [True]
 
 
 def test_replace_auto_source_leaves_manual_and_custom_rows(tmp_path) -> None:
