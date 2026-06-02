@@ -101,6 +101,54 @@ def test_read_tiles_retries_transient_locked_database(monkeypatch) -> None:
     assert stopped == [True]
 
 
+def test_read_tiles_retries_locked_tiles_content_join(monkeypatch) -> None:
+    attempts = []
+    stopped = []
+
+    class FakeCursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class FakeConnection:
+        def __init__(self, should_fail_join: bool) -> None:
+            self.should_fail_join = should_fail_join
+
+        def execute(self, sql, *_args, **_kwargs):
+            if sql == "pragma table_info(tiles)":
+                return FakeCursor([(0, "displayName"), (1, "appId"), (2, "cRank")])
+            if "from sqlite_master" in sql:
+                return FakeCursor([("tiles_content",)])
+            if sql == "pragma table_info(tiles_content)":
+                return FakeCursor([(0, "id"), (1, "c1")])
+            if "left join tiles_content" in sql:
+                if self.should_fail_join:
+                    raise sqlite3.OperationalError("database is locked")
+                return FakeCursor([("Google Chrome", "chrome", 1, "Programs/Google Chrome.lnk")])
+            return FakeCursor([("Google Chrome", "chrome", 1)])
+
+        def close(self) -> None:
+            pass
+
+    def fake_connect(_path, **_kwargs):
+        attempts.append(True)
+        return FakeConnection(should_fail_join=len(attempts) == 1)
+
+    monkeypatch.setattr(db_mod, "connect", fake_connect)
+    monkeypatch.setattr(db_mod, "stop_search_host", lambda: stopped.append(True))
+    monkeypatch.setattr(db_mod.time, "sleep", lambda _seconds: None)
+
+    tiles = read_tiles("AppsIndex.db")
+
+    assert [(tile.display_name, tile.content_c1) for tile in tiles] == [
+        ("Google Chrome", "Programs/Google Chrome.lnk")
+    ]
+    assert len(attempts) == 2
+    assert stopped == [True]
+
+
 def test_insert_alias_records_is_idempotent(tmp_path) -> None:
     db_path = tmp_path / "AppsIndex.db"
     create_fixture_db(db_path)

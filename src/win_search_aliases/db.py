@@ -135,7 +135,9 @@ def _read_tiles_once(db_path: str | Path) -> list[AppCandidate]:
                     left join tiles_content as tc on tc.id = t.rowid
                     """
                 ).fetchall()
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as exc:
+                if _is_transient_sqlite_error(exc):
+                    raise
                 rows = conn.execute(base_query).fetchall()
         else:
             rows = conn.execute(base_query).fetchall()
