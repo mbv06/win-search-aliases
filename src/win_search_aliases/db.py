@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 WRITE_RETRY_ATTEMPTS = 3
 READ_RETRY_ATTEMPTS = 3
+WRITE_SQLITE_TIMEOUT_SECONDS = 2.0
+READ_SQLITE_TIMEOUT_SECONDS = 1.0
 TRANSIENT_SQLITE_MESSAGES = (
     "database is locked",
     "database table is locked",
@@ -105,9 +107,9 @@ def resolve_db_path(path: str | Path | None = None) -> Path:
     return db_path
 
 
-def connect(db_path: str | Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(Path(db_path), timeout=10)
-    conn.execute("pragma busy_timeout = 10000")
+def connect(db_path: str | Path, *, timeout_seconds: float = WRITE_SQLITE_TIMEOUT_SECONDS) -> sqlite3.Connection:
+    conn = sqlite3.connect(Path(db_path), timeout=timeout_seconds)
+    conn.execute(f"pragma busy_timeout = {int(timeout_seconds * 1000)}")
     return conn
 
 
@@ -116,7 +118,7 @@ def read_tiles(db_path: str | Path) -> list[AppCandidate]:
 
 
 def _read_tiles_once(db_path: str | Path) -> list[AppCandidate]:
-    with closing(connect(db_path)) as conn:
+    with closing(_connect_for_read(db_path)) as conn:
         columns = {row[1] for row in conn.execute("pragma table_info(tiles)").fetchall()}
         required = {"displayName", "appId"}
         missing = required - columns
@@ -219,7 +221,7 @@ def _managed_rows_once(
     sources: set[str] | None = None,
 ) -> list[ManagedRow]:
     where_sql, params = _managed_source_filter(sources)
-    with closing(connect(db_path)) as conn:
+    with closing(_connect_for_read(db_path)) as conn:
         rows = conn.execute(
             f"""
             select displayName, synonym, rankPenalty, source
@@ -333,6 +335,10 @@ def _begin_write(conn: sqlite3.Connection) -> None:
     conn.execute("begin immediate")
 
 
+def _connect_for_read(db_path: str | Path) -> sqlite3.Connection:
+    return connect(db_path, timeout_seconds=READ_SQLITE_TIMEOUT_SECONDS)
+
+
 def _write_transaction(db_path: str | Path, write: Callable[[sqlite3.Connection], T]) -> T:
     return _with_sqlite_retry("write", lambda: _write_transaction_once(db_path, write), attempts=WRITE_RETRY_ATTEMPTS)
 
@@ -351,6 +357,7 @@ def _write_transaction_once(db_path: str | Path, write: Callable[[sqlite3.Connec
 
 def _with_sqlite_retry(operation: str, action: Callable[[], T], *, attempts: int) -> T:
     for attempt in range(attempts):
+        logger.debug("SQLite %s attempt %s/%s", operation, attempt + 1, attempts)
         try:
             return action()
         except sqlite3.OperationalError as exc:

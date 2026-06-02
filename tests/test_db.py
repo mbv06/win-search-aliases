@@ -6,9 +6,11 @@ from win_search_aliases import db as db_mod
 from win_search_aliases.aliases import AliasRecord
 from win_search_aliases.config import load_deny_list
 from win_search_aliases.db import (
+    READ_SQLITE_TIMEOUT_SECONDS,
     SOURCE_CUSTOM,
     SOURCE_GENERATED_AUTO,
     SOURCE_GENERATED_MANUAL,
+    connect,
     create_backup,
     insert_alias_records,
     managed_rows,
@@ -33,6 +35,27 @@ def test_read_tiles_and_counts_report_total_and_eligible(tmp_path) -> None:
     assert len(candidates) == 1
     assert candidates[0].display_name == "Google Chrome"
     assert candidates[0].content_c1.endswith("Google Chrome.lnk")
+
+
+def test_connect_applies_requested_busy_timeout(monkeypatch) -> None:
+    seen = {}
+
+    class FakeConnection:
+        def execute(self, sql):
+            seen["pragma"] = sql
+
+    def fake_sqlite_connect(path, *, timeout):
+        seen["path"] = path
+        seen["timeout"] = timeout
+        return FakeConnection()
+
+    monkeypatch.setattr(db_mod.sqlite3, "connect", fake_sqlite_connect)
+
+    conn = connect("AppsIndex.db", timeout_seconds=READ_SQLITE_TIMEOUT_SECONDS)
+
+    assert conn is not None
+    assert seen["timeout"] == READ_SQLITE_TIMEOUT_SECONDS
+    assert seen["pragma"] == "pragma busy_timeout = 1000"
 
 
 def test_read_tiles_retries_transient_locked_database(monkeypatch) -> None:
@@ -63,7 +86,7 @@ def test_read_tiles_retries_transient_locked_database(monkeypatch) -> None:
         def close(self) -> None:
             self.closed = True
 
-    def fake_connect(_path):
+    def fake_connect(_path, **_kwargs):
         attempts.append(True)
         return FakeConnection(should_fail=len(attempts) == 1)
 
@@ -169,7 +192,7 @@ def test_managed_rows_closes_connection(monkeypatch) -> None:
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr("win_search_aliases.db.connect", lambda _path: FakeConnection())
+    monkeypatch.setattr("win_search_aliases.db.connect", lambda _path, **_kwargs: FakeConnection())
 
     assert managed_rows("AppsIndex.db") == []
     assert closed == [True]
@@ -195,7 +218,7 @@ def test_managed_rows_retries_transient_locked_database(monkeypatch) -> None:
         def close(self) -> None:
             pass
 
-    def fake_connect(_path):
+    def fake_connect(_path, **_kwargs):
         attempts.append(True)
         return FakeConnection(should_fail=len(attempts) == 1)
 
