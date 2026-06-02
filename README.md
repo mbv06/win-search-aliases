@@ -46,7 +46,7 @@ powershell -ExecutionPolicy Bypass -c "iwr -useb https://raw.githubusercontent.c
 ### pip
 
 ```bash
-python -m pip install https://github.com/mbv06/win-search-aliases/archive/refs/heads/main.zip
+python -m pip install --upgrade https://github.com/mbv06/win-search-aliases/archive/refs/heads/main.zip
 ```
 
 ### Standalone EXE
