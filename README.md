@@ -10,6 +10,8 @@
 
 **Find any app from Windows Start search — even when you type in the wrong keyboard layout.**
 
+<img width="766" height="426" alt="image" src="https://github.com/user-attachments/assets/64859070-8248-40c6-80c6-4fa3fcf859a5" />
+
 Adds managed synonyms to the internal Windows Search `AppsIndex.db` so that apps are found regardless of whether you typed in Latin or Cyrillic (or any other supported layout).
 
 [**View Changelog**](CHANGELOG.md)
@@ -23,11 +25,10 @@ Adds managed synonyms to the internal Windows Search `AppsIndex.db` so that apps
 
 ## Screenshots
 
-<!-- Upload screenshots via GitHub (drag & drop) and paste the URLs below -->
-
 | CLI | UI |
 |:---:|:---:|
-| ![CLI screenshot](CLI_SCREENSHOT_URL) | ![UI screenshot](UI_SCREENSHOT_URL) |
+| <img width="410" height="481" alt="image" src="https://github.com/user-attachments/assets/4e68f2f9-2327-489b-bce0-a84cc8b7cba3" /> | <img width="604" height="448" alt="image" src="https://github.com/user-attachments/assets/fa75ca20-68be-41b0-a8de-f07da906e54b" />
+|
 
 ---
 
@@ -100,6 +101,14 @@ win-search-aliases generate-all --map auto --dry-run
 
 > [!NOTE]
 > A timestamped backup is created before every write. Use `restore-backup` to roll back at any time.
+
+---
+
+## Supported Layouts
+
+The tool comes with a set of default keyboard maps. You can see the full list of natively supported layouts in the [`keyboard_maps.toml`](src/win_search_aliases/config/keyboard_maps.toml) file.
+
+If your preferred layout is not supported, you can easily add it yourself! Check out the [Adding Custom Keyboard Layouts](docs/custom_keyboard_layouts.md) guide for instructions on how to define your own layout.
 
 ---
 
