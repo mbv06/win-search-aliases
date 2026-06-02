@@ -51,6 +51,7 @@ DEFAULT_DB_RELATIVE = (
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 WRITE_RETRY_ATTEMPTS = 3
+READ_RETRY_ATTEMPTS = 3
 TRANSIENT_SQLITE_MESSAGES = (
     "database is locked",
     "database table is locked",
@@ -111,6 +112,10 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
 
 
 def read_tiles(db_path: str | Path) -> list[AppCandidate]:
+    return _with_sqlite_retry("read", lambda: _read_tiles_once(db_path), attempts=READ_RETRY_ATTEMPTS)
+
+
+def _read_tiles_once(db_path: str | Path) -> list[AppCandidate]:
     with closing(connect(db_path)) as conn:
         columns = {row[1] for row in conn.execute("pragma table_info(tiles)").fetchall()}
         required = {"displayName", "appId"}
@@ -203,6 +208,13 @@ def replace_alias_records(db_path: str | Path, records: list[AliasRecord], *, so
 
 
 def managed_rows(
+    db_path: str | Path,
+    sources: set[str] | None = None,
+) -> list[ManagedRow]:
+    return _with_sqlite_retry("read", lambda: _managed_rows_once(db_path, sources), attempts=READ_RETRY_ATTEMPTS)
+
+
+def _managed_rows_once(
     db_path: str | Path,
     sources: set[str] | None = None,
 ) -> list[ManagedRow]:
@@ -322,7 +334,7 @@ def _begin_write(conn: sqlite3.Connection) -> None:
 
 
 def _write_transaction(db_path: str | Path, write: Callable[[sqlite3.Connection], T]) -> T:
-    return _with_write_retry(lambda: _write_transaction_once(db_path, write))
+    return _with_sqlite_retry("write", lambda: _write_transaction_once(db_path, write), attempts=WRITE_RETRY_ATTEMPTS)
 
 
 def _write_transaction_once(db_path: str | Path, write: Callable[[sqlite3.Connection], T]) -> T:
@@ -337,17 +349,21 @@ def _write_transaction_once(db_path: str | Path, write: Callable[[sqlite3.Connec
         return result
 
 
-def _with_write_retry(write: Callable[[], T]) -> T:
-    for attempt in range(WRITE_RETRY_ATTEMPTS):
+def _with_sqlite_retry(operation: str, action: Callable[[], T], *, attempts: int) -> T:
+    for attempt in range(attempts):
         try:
-            return write()
+            return action()
         except sqlite3.OperationalError as exc:
-            if attempt == WRITE_RETRY_ATTEMPTS - 1 or not _is_transient_sqlite_error(exc):
+            if attempt == attempts - 1 or not _is_transient_sqlite_error(exc):
                 raise
-            logger.warning("SQLite write failed with a transient error; retrying after stopping SearchHost: %s", exc)
+            logger.warning(
+                "SQLite %s failed with a transient error; retrying after stopping SearchHost: %s",
+                operation,
+                exc,
+            )
             stop_search_host()
             time.sleep(0.25 * (attempt + 1))
-    raise RuntimeError("unreachable SQLite write retry state")
+    raise RuntimeError(f"unreachable SQLite {operation} retry state")
 
 
 def _rollback_quietly(conn: sqlite3.Connection) -> None:

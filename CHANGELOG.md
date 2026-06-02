@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 - 2026-06-03
+
+### Fixed
+
+- Improved reliability when Windows Search is using the app index, so both the CLI and desktop UI can recover from temporary database locks while loading apps, showing managed aliases, or generating aliases.
+
 ## v0.1.0 - 2026-06-01
 
 Initial version of `win-search-aliases`.
