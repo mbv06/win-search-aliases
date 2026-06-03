@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.2 - 2026-06-04
+
+### Changed
+
+- Switched the Python install flow to stable GitHub Release assets instead of installing from the `main` branch.
+- Release builds now publish a fixed-name `win-search-aliases-python.tar.gz` asset for `pip install` and include `install.ps1` next to the Windows `.exe`.
+- Updated the README and PowerShell installer so one-liner and manual installs both use the latest stable release.
+
 ## v0.1.1 - 2026-06-03
 
 ### Fixed

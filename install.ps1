@@ -14,7 +14,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$DefaultProjectSpec = 'https://github.com/mbv06/win-search-aliases/archive/refs/heads/main.zip'
+$DefaultProjectSpec = 'https://github.com/mbv06/win-search-aliases/releases/latest/download/win-search-aliases-python.tar.gz'
 $ProjectSpec = if ($env:WIN_SEARCH_ALIASES_PROJECT_SPEC) { $env:WIN_SEARCH_ALIASES_PROJECT_SPEC } else { $DefaultProjectSpec }
 $AppName = 'win-search-aliases'
 $MinMajor = 3

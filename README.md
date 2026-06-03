@@ -47,13 +47,13 @@ No Python is required, and after generation finishes you can start using Windows
 Installs the tool, adds it to `PATH`, runs automatic alias generation, and leaves everything ready to use:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "iwr -useb https://raw.githubusercontent.com/mbv06/win-search-aliases/main/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/mbv06/win-search-aliases/releases/latest/download/install.ps1 | iex"
 ```
 
 ### Manual
 
-```bash
-python -m pip install --upgrade https://github.com/mbv06/win-search-aliases/archive/refs/heads/main.zip
+```powershell
+python -m pip install --upgrade https://github.com/mbv06/win-search-aliases/releases/latest/download/win-search-aliases-python.tar.gz
 ```
 
 Then run `win-search-aliases auto` or open the UI with `win-search-aliases-ui`.
