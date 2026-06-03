@@ -34,46 +34,61 @@ Adds managed synonyms to the internal Windows Search `AppsIndex.db` so that apps
 
 ## Quick Install
 
-**One-liner** (PowerShell):
+Choose the install mode that fits you:
+
+### Standalone EXE
+
+Download `win-search-aliases-ui-<version>.exe` from the [latest release](https://github.com/mbv06/win-search-aliases/releases/latest), launch it, and click `Auto Generate All`.
+
+No Python is required, and after generation finishes you can start using Windows Search right away.
+
+### One-liner
+
+Installs the tool, adds it to `PATH`, runs automatic alias generation, and leaves everything ready to use:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "iwr -useb https://raw.githubusercontent.com/mbv06/win-search-aliases/main/install.ps1 | iex"
 ```
 
-<details>
-<summary><b>Other install methods</b></summary>
-
-### pip
+### Manual
 
 ```bash
 python -m pip install --upgrade https://github.com/mbv06/win-search-aliases/archive/refs/heads/main.zip
 ```
 
-### Standalone EXE
-
-Download `win-search-aliases-ui-<version>.exe` from the [latest release](https://github.com/mbv06/win-search-aliases/releases/latest) — no Python needed.
-
-</details>
+Then run `win-search-aliases auto` or open the UI with `win-search-aliases-ui`.
 
 ---
 
 ## Usage
 
+Choose how you want to work:
+
+### 1. Launch the UI client
+
 ```powershell
-# Auto-detect layouts & apply aliases
-win-search-aliases auto
-
-# Interactive generation for specific apps
-win-search-aliases generate-selected --map uk-jcuken
-
-# Open desktop UI
 win-search-aliases-ui
+```
+
+### 2. Auto mode
+
+```powershell
+win-search-aliases auto
+```
+
+### 3. Interactive mode
+
+```powershell
+win-search-aliases interactive
 ```
 
 <details>
 <summary><b>More commands</b></summary>
 
 ```powershell
+# Generate aliases for specific apps
+win-search-aliases generate-selected --map uk-jcuken
+
 # Add a custom alias
 win-search-aliases add-custom --app "Google Chrome" --alias browser
 
@@ -136,7 +151,7 @@ Simply delete the created virtual environment directory (this will keep your bac
 Remove-Item -Recurse -Force "$env:LOCALAPPDATA\win-search-aliases\venv"
 ```
 
-**If installed via pip:**
+**If installed manually (`pip`):**
 ```bash
 python -m pip uninstall win-search-aliases
 ```
