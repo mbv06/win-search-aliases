@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.3 - 2026-08-13
+
+### Changed
+
+- The PowerShell installer from a GitHub Release now installs that same release instead of always following `latest`.
+- Added a public `dev` prerelease channel with a stable install URL, so test builds can be installed without affecting the latest stable release.
+
 ## v0.1.2 - 2026-06-04
 
 ### Changed
